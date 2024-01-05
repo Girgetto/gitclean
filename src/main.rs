@@ -4,14 +4,15 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
+use navigator::find_git_repos;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
     style::{Color, Style},
-    widgets::{Block, Borders, Row, Table, TableState},
+    text::Text,
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 use std::io::{stdout, Result};
-use navigator::find_git_repos;
 
 fn main() -> Result<()> {
     stdout().execute(EnterAlternateScreen)?;
@@ -19,7 +20,11 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let path = std::env::current_dir().unwrap().to_str().unwrap().to_string();
+    let path = std::env::current_dir()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     let git_dirs = find_git_repos(&path);
     let mut table_state = TableState::default();
     table_state.select(Some(0));
@@ -30,8 +35,20 @@ fn main() -> Result<()> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints([Constraint::Percentage(100)].as_ref())
+                .constraints([Constraint::Percentage(10), Constraint::Percentage(90)].as_ref())
                 .split(frame.size());
+
+            let text = Text::styled(
+                "q: quit | d: delete | up/down: navigate",
+                Style::default().fg(Color::White),
+            );
+
+            let paragraph = Paragraph::new(text)
+                .block(Block::default())
+                .style(Style::default().fg(Color::White))
+                .alignment(ratatui::layout::Alignment::Center);
+
+            frame.render_widget(paragraph, chunks[0]);
 
             let rows = git_dirs
                 .iter()
@@ -56,12 +73,12 @@ fn main() -> Result<()> {
                         .style(Style::new().bold())
                         .bottom_margin(1),
                 )
-                .block(Block::default().title("GitClean").borders(Borders::ALL))
+                .block(Block::default().borders(Borders::ALL))
                 .highlight_style(Style::new().reversed())
                 .bg(Color::Black)
                 .highlight_symbol(">>");
 
-            frame.render_stateful_widget(table, chunks[0], &mut table_state);
+            frame.render_stateful_widget(table, chunks[1], &mut table_state);
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
