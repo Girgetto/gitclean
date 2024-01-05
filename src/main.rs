@@ -13,6 +13,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 use std::io::{stdout, Result};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 fn main() -> Result<()> {
     stdout().execute(EnterAlternateScreen)?;
@@ -20,12 +22,45 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let path = std::env::current_dir()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let git_dirs = find_git_repos(&path);
+    let path = Arc::new(
+        std::env::current_dir()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string(),
+    );
+    let git_dirs = Arc::new(Mutex::new(Vec::new()));
+
+    let path_clone = Arc::clone(&path);
+    let git_dirs_clone = Arc::clone(&git_dirs);
+
+    thread::spawn(move || {
+        *git_dirs_clone.lock().unwrap() = find_git_repos(&*path_clone);
+    });
+
+    while git_dirs.lock().unwrap().is_empty() {
+        terminal.draw(|frame| {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([Constraint::Percentage(100)].as_ref())
+                .split(frame.size());
+
+            let text = Text::styled("Reading Paths...", Style::default().fg(Color::White));
+
+            let paragraph = Paragraph::new(text)
+                .block(Block::default())
+                .style(Style::default().fg(Color::White))
+                .alignment(ratatui::layout::Alignment::Center);
+
+            frame.render_widget(paragraph, chunks[0]);
+        })?;
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    let git_dirs = Arc::try_unwrap(git_dirs).unwrap().into_inner().unwrap();
+
     let mut table_state = TableState::default();
     table_state.select(Some(0));
     let mut deleted_dirs: Vec<usize> = Vec::new();
