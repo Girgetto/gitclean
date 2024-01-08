@@ -70,8 +70,32 @@ fn main() -> Result<()> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints([Constraint::Percentage(10), Constraint::Percentage(90)].as_ref())
+                .constraints(
+                    [
+                        Constraint::Percentage(10),
+                        Constraint::Percentage(80),
+                        Constraint::Percentage(10),
+                    ]
+                    .as_ref(),
+                )
                 .split(frame.size());
+
+            let letters = vec![
+                "_____ _ _    _____ _                  ",
+                "/ ____(_) |  / ____| |                 ",
+                "| |  __ _| |_| |    | | ___  __ _ _ __  ",
+                "| | |_ | | __| |    | |/ _ \\/ _` | '_ \\ ",
+                "| |__| | | |_| |____| |  __/ (_| | | | |",
+                "\\_____|_|\\__|\\_____|_|\\___|\\__,_|_| |_|",
+            ];
+
+            frame.render_widget(
+                Paragraph::new(Text::from(letters.join("\n")))
+                    .block(Block::default())
+                    .style(Style::default().fg(Color::White))
+                    .alignment(ratatui::layout::Alignment::Center),
+                chunks[0],
+            );
 
             let text = Text::styled(
                 "q: quit | d: delete | up/down: navigate",
@@ -83,7 +107,7 @@ fn main() -> Result<()> {
                 .style(Style::default().fg(Color::White))
                 .alignment(ratatui::layout::Alignment::Center);
 
-            frame.render_widget(paragraph, chunks[0]);
+            frame.render_widget(paragraph, chunks[2]);
 
             let rows = git_dirs
                 .iter()
