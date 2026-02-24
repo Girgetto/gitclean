@@ -13,7 +13,10 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 use std::io::{stdout, Result};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 
 fn main() -> Result<()> {
@@ -30,42 +33,26 @@ fn main() -> Result<()> {
             .to_string(),
     );
     let git_dirs = Arc::new(Mutex::new(Vec::new()));
+    let scanning_done = Arc::new(AtomicBool::new(false));
 
     let path_clone = Arc::clone(&path);
     let git_dirs_clone = Arc::clone(&git_dirs);
+    let scanning_done_clone = Arc::clone(&scanning_done);
 
     thread::spawn(move || {
-        *git_dirs_clone.lock().unwrap() = find_git_repos(&*path_clone);
+        find_git_repos(&*path_clone, git_dirs_clone);
+        scanning_done_clone.store(true, Ordering::Relaxed);
     });
-
-    while git_dirs.lock().unwrap().is_empty() {
-        terminal.draw(|frame| {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints([Constraint::Percentage(100)].as_ref())
-                .split(frame.size());
-
-            let text = Text::styled("Reading Paths...", Style::default().fg(Color::White));
-
-            let paragraph = Paragraph::new(text)
-                .block(Block::default())
-                .style(Style::default().fg(Color::White))
-                .alignment(ratatui::layout::Alignment::Center);
-
-            frame.render_widget(paragraph, chunks[0]);
-        })?;
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    let git_dirs = Arc::try_unwrap(git_dirs).unwrap().into_inner().unwrap();
 
     let mut table_state = TableState::default();
     table_state.select(Some(0));
     let mut deleted_dirs: Vec<usize> = Vec::new();
 
     loop {
+        let is_done = scanning_done.load(Ordering::Relaxed);
+        let current_paths = git_dirs.lock().unwrap().clone();
+        let num_paths = current_paths.len();
+
         terminal.draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -97,10 +84,16 @@ fn main() -> Result<()> {
                 chunks[0],
             );
 
-            let text = Text::styled(
-                "q: quit | d: delete | up/down: navigate",
-                Style::default().fg(Color::White),
-            );
+            let status_text = if is_done {
+                "q: quit | d: delete | up/down: navigate".to_string()
+            } else {
+                format!(
+                    "Scanning... ({} found) | q: quit | d: delete | up/down: navigate",
+                    num_paths
+                )
+            };
+
+            let text = Text::styled(status_text, Style::default().fg(Color::White));
 
             let paragraph = Paragraph::new(text)
                 .block(Block::default())
@@ -109,12 +102,11 @@ fn main() -> Result<()> {
 
             frame.render_widget(paragraph, chunks[2]);
 
-            let rows = git_dirs
+            let rows = current_paths
                 .iter()
-                .map(|path| {
-                    Row::new(vec![if deleted_dirs
-                        .contains(&git_dirs.iter().position(|x| x == path).unwrap())
-                    {
+                .enumerate()
+                .map(|(i, path)| {
+                    Row::new(vec![if deleted_dirs.contains(&i) {
                         format!("[deleted] {}", path.display())
                     } else {
                         format!("{}", path.display())
@@ -142,19 +134,23 @@ fn main() -> Result<()> {
 
         if event::poll(std::time::Duration::from_millis(16))? {
             if let event::Event::Key(key) = event::read()? {
-                let current_index = table_state.selected().unwrap();
+                let current_index = table_state.selected().unwrap_or(0);
                 match (key.kind, key.code) {
                     (KeyEventKind::Press, KeyCode::Char('q')) => {
                         break;
                     }
                     (KeyEventKind::Press, KeyCode::Char('d')) => {
-                        let selected = git_dirs.get(current_index).unwrap();
-                        let _ = std::fs::remove_dir_all(selected);
-
-                        deleted_dirs.push(current_index);
+                        if num_paths > 0 {
+                            let selected_path =
+                                git_dirs.lock().unwrap().get(current_index).cloned();
+                            if let Some(selected) = selected_path {
+                                let _ = std::fs::remove_dir_all(&selected);
+                                deleted_dirs.push(current_index);
+                            }
+                        }
                     }
                     (KeyEventKind::Press, KeyCode::Down) => {
-                        if current_index < git_dirs.len() - 1 {
+                        if num_paths > 0 && current_index < num_paths - 1 {
                             table_state.select(Some(current_index + 1));
                         }
                     }
