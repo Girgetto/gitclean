@@ -10,8 +10,39 @@
 - **Safe Deletion**: Preview and select `.git` directories before deciding to delete them.
 - **Efficient Clean-up**: Quickly free up space and declutter your development environment.
 
+## Requirements
+
+- [Rust](https://www.rust-lang.org/tools/install) 1.70 or later (includes `cargo`)
+
 ## Usage
 
-### Download the binary
+### Run from source
+
+Clone the repository and run directly with Cargo:
+
+```bash
+git clone https://github.com/Girgetto/gitclean.git
+cd gitclean
+cargo run --release
+```
+
+`gitclean` starts in the **current working directory**, so `cd` to the root you want to scan before running it.
+
+### Install globally
+
+Install the binary into `~/.cargo/bin` so it is available anywhere on your `PATH`:
+
+```bash
+cargo install --path .
+```
+
+Then launch it from any directory:
+
+```bash
+cd ~/projects
+gitclean
+```
+
+### Download the pre-built binary
 
 Download the latest binary from the [releases page](https://github.com/Girgetto/gitclean/releases/tag/v0.1.0).
